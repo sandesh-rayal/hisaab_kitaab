@@ -9,19 +9,25 @@ st.set_page_config(page_title="💰 Hisaab-Kitaab", page_icon="📖", layout="ce
 
 # -------------------- FILE HANDLING --------------------
 DATA_FILE = "transactions.csv"
-
-expected_cols = ["Type", "Category", "Amount", "Date", "Description"]
+EXPECTED_COLS = ["Type", "Category", "Amount", "Date", "Description"]
 
 # Load data safely
 if os.path.exists(DATA_FILE):
     try:
         df = pd.read_csv(DATA_FILE)
-        if df.empty or list(df.columns) != expected_cols:
-            df = pd.DataFrame(columns=expected_cols)
+        # Reset if structure is invalid
+        if list(df.columns) != EXPECTED_COLS:
+            df = pd.DataFrame(columns=EXPECTED_COLS)
     except Exception:
-        df = pd.DataFrame(columns=expected_cols)
+        df = pd.DataFrame(columns=EXPECTED_COLS)
 else:
-    df = pd.DataFrame(columns=expected_cols)
+    df = pd.DataFrame(columns=EXPECTED_COLS)
+
+# Ensure 'Date' column is datetime
+if "Date" in df.columns:
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    # Format as dd/mm/yyyy for display
+    df["Date"] = df["Date"].dt.strftime("%d/%m/%Y")
 
 # -------------------- APP HEADER --------------------
 st.title("💰 Hisaab-Kitaab — Personal Budget Tracker")
@@ -42,10 +48,12 @@ if username:
     )
     amount = st.number_input("Amount (₹)", min_value=0.0, format="%.2f")
     date = st.date_input("Date", datetime.now())
+    # Convert date to string in dd/mm/yyyy format
+    date_str = date.strftime("%d/%m/%Y")
     desc = st.text_input("Description")
 
     if st.button("💾 Save Transaction"):
-        new_data = pd.DataFrame([[t_type, category, amount, date, desc]], columns=expected_cols)
+        new_data = pd.DataFrame([[t_type, category, amount, date_str, desc]], columns=EXPECTED_COLS)
         df = pd.concat([df, new_data], ignore_index=True)
         df.to_csv(DATA_FILE, index=False)
         st.success("Transaction saved successfully!")
@@ -85,11 +93,15 @@ if username:
     st.header("📜 Transaction History")
 
     if not df.empty:
-        st.dataframe(df.sort_values(by="Date", ascending=False), use_container_width=True)
+        # Display sorted by date (latest first)
+        df_display = df.copy()
+        df_display["Date_sort"] = pd.to_datetime(df_display["Date"], format="%d/%m/%Y", errors="coerce")
+        st.dataframe(df_display.sort_values(by="Date_sort", ascending=False).drop(columns=["Date_sort"]),
+                     use_container_width=True)
 
         if st.button("🗑 Clear All Transactions"):
             os.remove(DATA_FILE)
-            df = pd.DataFrame(columns=expected_cols)
+            df = pd.DataFrame(columns=EXPECTED_COLS)
             st.warning("All transactions deleted!")
             st.rerun()
     else:
