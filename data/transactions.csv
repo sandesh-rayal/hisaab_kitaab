@@ -1,0 +1,7 @@
+type,category,amount,date,description
+income,Salary,20000.0,2025-11-06,salary
+expense,Food,500.0,2025-11-06,party
+expense,Food,500.0,2025-11-06,vada pav
+income,Salary,20000.0,2025-11-06,salary credited
+expense,Food,500.0,2025-11-06,popcorn
+expense,Food,20.0,2025-11-06,vada pav

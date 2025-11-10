@@ -1,0 +1,6 @@
+type,category,amount,date,description,month,year
+expense,Food,500.0,2025-11-10,dosa,November,2025
+expense,Entertainment,200.0,2025-11-10,movie,November,2025
+expense,Food,100.0,2025-11-10,shawarma,November,2025
+expense,Bills,2000.0,2025-11-10,electricity,November,2025
+expense,Food,30.0,2025-11-10,samosa,November,2025
