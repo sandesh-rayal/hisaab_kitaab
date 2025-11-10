@@ -9,25 +9,18 @@ st.set_page_config(page_title="💰 Hisaab-Kitaab", page_icon="📖", layout="ce
 
 # -------------------- FILE HANDLING --------------------
 DATA_FILE = "transactions.csv"
-EXPECTED_COLS = ["Type", "Category", "Amount", "Date", "Description"]
+expected_cols = ["Type", "Category", "Amount", "Date", "Description", "Username"]
 
 # Load data safely
 if os.path.exists(DATA_FILE):
     try:
         df = pd.read_csv(DATA_FILE)
-        # Reset if structure is invalid
-        if list(df.columns) != EXPECTED_COLS:
-            df = pd.DataFrame(columns=EXPECTED_COLS)
+        if df.empty or list(df.columns) != expected_cols:
+            df = pd.DataFrame(columns=expected_cols)
     except Exception:
-        df = pd.DataFrame(columns=EXPECTED_COLS)
+        df = pd.DataFrame(columns=expected_cols)
 else:
-    df = pd.DataFrame(columns=EXPECTED_COLS)
-
-# Ensure 'Date' column is datetime
-if "Date" in df.columns:
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    # Format as dd/mm/yyyy for display
-    df["Date"] = df["Date"].dt.strftime("%d/%m/%Y")
+    df = pd.DataFrame(columns=expected_cols)
 
 # -------------------- APP HEADER --------------------
 st.title("💰 Hisaab-Kitaab — Personal Budget Tracker")
@@ -36,7 +29,11 @@ st.title("💰 Hisaab-Kitaab — Personal Budget Tracker")
 username = st.text_input("Enter your name to continue:")
 
 if username:
-    st.subheader(f"Welcome, {username.capitalize()}!")
+    user_exists = username in df["Username"].values if not df.empty else False
+    if user_exists:
+        st.subheader(f"Welcome back, {username.capitalize()}!")
+    else:
+        st.subheader(f"Welcome, {username.capitalize()}!")
 
     st.markdown("---")
     st.header("➕ Add New Transaction")
@@ -48,12 +45,11 @@ if username:
     )
     amount = st.number_input("Amount (₹)", min_value=0.0, format="%.2f")
     date = st.date_input("Date", datetime.now())
-    # Convert date to string in dd/mm/yyyy format
-    date_str = date.strftime("%d/%m/%Y")
     desc = st.text_input("Description")
 
     if st.button("💾 Save Transaction"):
-        new_data = pd.DataFrame([[t_type, category, amount, date_str, desc]], columns=EXPECTED_COLS)
+        new_data = pd.DataFrame([[t_type, category, amount, date.strftime("%d/%m/%Y"), desc, username]],
+                                columns=expected_cols)
         df = pd.concat([df, new_data], ignore_index=True)
         df.to_csv(DATA_FILE, index=False)
         st.success("Transaction saved successfully!")
@@ -61,49 +57,63 @@ if username:
     st.markdown("---")
     st.header("📊 Summary Overview")
 
-    if not df.empty:
-        try:
-            total_income = df[df["Type"] == "Income"]["Amount"].sum()
-            total_expense = df[df["Type"] == "Expense"]["Amount"].sum()
-            balance = total_income - total_expense
+    user_df = df[df["Username"] == username] if not df.empty else pd.DataFrame(columns=expected_cols)
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Income", f"₹{total_income:,.2f}")
-            col2.metric("Total Expense", f"₹{total_expense:,.2f}")
-            col3.metric("Balance", f"₹{balance:,.2f}")
+    if not user_df.empty:
+        # -------------------- FILTER BY MONTH --------------------
+        months = user_df['Date'].apply(lambda x: datetime.strptime(x, "%d/%m/%Y").strftime("%B %Y")).unique()
+        selected_month = st.selectbox("Filter by Month", ["All"] + list(months))
 
-            # ---------- Visualization ----------
-            st.markdown("### 💹 Expense Breakdown")
-            expense_df = df[df["Type"] == "Expense"]
-            if not expense_df.empty:
-                fig, ax = plt.subplots()
-                expense_df.groupby("Category")["Amount"].sum().plot(
-                    kind="pie", autopct="%1.1f%%", ax=ax, startangle=90
-                )
-                ax.set_ylabel("")
-                st.pyplot(fig)
-            else:
-                st.info("No expenses yet to visualize.")
-        except Exception as e:
-            st.error(f"⚠️ Error in summary: {e}")
+        if selected_month != "All":
+            user_df = user_df[user_df['Date'].apply(lambda x: datetime.strptime(x, "%d/%m/%Y").strftime("%B %Y")) == selected_month]
+
+        total_income = user_df[user_df["Type"] == "Income"]["Amount"].sum()
+        total_expense = user_df[user_df["Type"] == "Expense"]["Amount"].sum()
+        balance = total_income - total_expense
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Income", f"₹{total_income:,.2f}")
+        col2.metric("Total Expense", f"₹{total_expense:,.2f}")
+        col3.metric("Balance", f"₹{balance:,.2f}")
+
+        # ---------- Visualization ----------
+        st.markdown("### 💹 Expense Breakdown")
+        expense_df = user_df[user_df["Type"] == "Expense"]
+        if not expense_df.empty:
+            fig, ax = plt.subplots()
+            expense_df.groupby("Category")["Amount"].sum().plot(
+                kind="pie", autopct="%1.1f%%", ax=ax, startangle=90
+            )
+            ax.set_ylabel("")
+            st.pyplot(fig)
+        else:
+            st.info("No expenses yet to visualize.")
     else:
         st.info("No transactions found. Add some to see the summary!")
 
     st.markdown("---")
     st.header("📜 Transaction History")
 
-    if not df.empty:
-        # Display sorted by date (latest first)
-        df_display = df.copy()
-        df_display["Date_sort"] = pd.to_datetime(df_display["Date"], format="%d/%m/%Y", errors="coerce")
-        st.dataframe(df_display.sort_values(by="Date_sort", ascending=False).drop(columns=["Date_sort"]),
-                     use_container_width=True)
+    if not user_df.empty:
+        # Show dataframe with transaction indices
+        st.dataframe(user_df.sort_values(by="Date", ascending=False), use_container_width=True)
 
-        if st.button("🗑 Clear All Transactions"):
-            os.remove(DATA_FILE)
-            df = pd.DataFrame(columns=EXPECTED_COLS)
-            st.warning("All transactions deleted!")
-            st.rerun()
+        # Delete individual transaction
+        st.markdown("### 🗑 Delete a Transaction")
+        transaction_indices = user_df.index.tolist()
+        selected_index = st.selectbox("Select transaction to delete:", transaction_indices)
+        if st.button("Delete Selected Transaction"):
+            df = df.drop(selected_index).reset_index(drop=True)
+            df.to_csv(DATA_FILE, index=False)
+            st.success("Transaction deleted successfully!")
+            st.experimental_rerun()
+
+        # Option to clear all transactions
+        if st.button("🗑 Clear All My Transactions"):
+            df = df[df["Username"] != username]
+            df.to_csv(DATA_FILE, index=False)
+            st.warning("All your transactions deleted!")
+            st.experimental_rerun()
     else:
         st.write("No records yet. Start by adding your first transaction!")
 
